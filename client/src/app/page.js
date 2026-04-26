@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Skeleton from '@/components/ui/Skeleton';
+
 
 export default function RootPage() {
   const router = useRouter();
@@ -12,8 +14,25 @@ export default function RootPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-      <div className="w-16 h-16 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
+    <div className="min-h-screen bg-[#F8FAFC] p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div className="flex items-center justify-between">
+          <Skeleton width="200px" height="40px" />
+          <div className="flex gap-4">
+            <Skeleton width="40px" height="40px" rounded="rounded-full" />
+            <Skeleton width="120px" height="40px" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Skeleton height="160px" rounded="rounded-2xl" />
+          <Skeleton height="160px" rounded="rounded-2xl" />
+          <Skeleton height="160px" rounded="rounded-2xl" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Skeleton height="400px" rounded="rounded-2xl" />
+          <Skeleton height="400px" rounded="rounded-2xl" />
+        </div>
+      </div>
     </div>
   );
 }

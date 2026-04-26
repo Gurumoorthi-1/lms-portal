@@ -261,4 +261,258 @@ ${code}
       return 'Failed to analyze code at this time.';
     }
   }
+
+  // --- NEW AI INTERVIEW METHODS ---
+
+  async analyzeResume(text: string): Promise<any> {
+    const analysisPrompt = `Analyze this resume and provide a comprehensive assessment. Return ONLY valid JSON with no extra text.
+
+Resume Content:
+${text.substring(0, 3000)}
+
+Return this exact JSON structure:
+{
+  "atsScore": <number 0-100>,
+  "skills": ["skill1", "skill2", ...],
+  "primaryProgrammingLanguage": "javascript | python | java | cpp | typescript",
+  "experience": ["exp1", "exp2", ...],
+  "education": ["edu1", ...],
+  "suggestions": ["suggestion1", "suggestion2", ...],
+  "missingSkills": ["skill1", ...],
+  "formattingIssues": ["issue1", ...],
+  "strengths": ["strength1", ...],
+  "jobTitles": ["title1", ...],
+  "summary": "brief professional summary"
+}
+
+IMPORTANT for primaryProgrammingLanguage: Only choose ONE from [javascript, python, java, cpp, typescript] that is most prominent in their experience and projects.`;
+
+    try {
+      const response: any = await this.openai.chat.completions.create({
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an expert ATS resume analyzer. Return only valid JSON.' },
+          { role: 'user', content: analysisPrompt }
+        ],
+        response_format: { type: 'json_object' }
+      });
+      return JSON.parse(response.choices?.[0]?.message?.content || '{}');
+    } catch (error) {
+      console.error('Resume Analysis Error:', error);
+      throw new BadRequestException('Failed to analyze resume via AI');
+    }
+  }
+
+  async generateAptitudeQuestions(skills: string, numQuestions: number): Promise<any[]> {
+    const prompt = `Generate exactly ${numQuestions} multiple-choice questions for a standard corporate Aptitude Test.
+
+CRITICAL INSTRUCTION:
+DO NOT generate ANY technical, coding, or programming language questions. The questions MUST be strictly general aptitude.
+Include a balanced mix of:
+- Quantitative Aptitude (math, percentages, ratios, algebra)
+- Logical Reasoning (patterns, puzzles, seating arrangements)
+- Verbal Ability (grammar, vocabulary, reading comprehension)
+- Data Interpretation
+
+Return ONLY valid JSON array:
+[
+  {
+    "id": "q1",
+    "question": "question text",
+    "options": ["option1", "option2", "option3", "option4"],
+    "correctAnswer": 0,
+    "hint": "helpful hint without giving away the answer",
+    "category": "quantitative",
+    "difficulty": "medium",
+    "explanation": "clear step-by-step mathematical or logical explanation"
+  }
+]
+
+correctAnswer MUST be an integer between 0 and 3. Ensure options are realistic and strictly related to the question.`;
+
+    try {
+      const response: any = await this.openai.chat.completions.create({
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an expert test designer. Return only valid JSON array.' },
+          { role: 'user', content: prompt }
+        ]
+      });
+      const rawText = response.choices?.[0]?.message?.content || '[]';
+      const match = rawText.match(/\[[\s\S]*\]/);
+      return match ? JSON.parse(match[0]) : JSON.parse(rawText);
+    } catch (error) {
+      console.error('Aptitude Generation Error:', error);
+      throw new BadRequestException('Failed to generate aptitude questions');
+    }
+  }
+
+  async generateCodingProblems(ctx: any, detectedLanguage: string): Promise<any[]> {
+    const prompt = `You are a senior technical interviewer. Generate EXACTLY 5 coding problems tailored to this candidate's resume.
+
+CANDIDATE PROFILE:
+- Skills: ${ctx.skills}
+- Technologies: ${ctx.technologies}
+- Experience: ${ctx.experience}
+- Projects: ${ctx.projects}
+- Resume Excerpt: ${ctx.resumeText}
+
+REQUIREMENTS:
+- Problem 1: EASY (1 problem) — fundamental algorithm/data structure matching their skill level
+- Problems 2-3: MEDIUM (2 problems) — intermediate, related to their tech stack
+- Problems 4-5: HARD (2 problems) — advanced, directly referencing their skills/projects
+
+IMPORTANT: Problems MUST reflect their specific skills.
+
+Return ONLY valid JSON array (no extra text):
+[
+  {
+    "id": "p1",
+    "title": "Problem Title",
+    "difficulty": "easy",
+    "description": "Full clear problem statement with context relevant to candidate's background",
+    "examples": [
+      {"input": "nums = [2,7,11,15], target = 9", "output": "[0,1]", "explanation": "nums[0] + nums[1] = 9"}
+    ],
+    "constraints": ["1 <= n <= 10^4"],
+    "tags": ["array", "hash-table"],
+    "starterCode": {
+      "${detectedLanguage}": "// starter code in ${detectedLanguage} with function signature"
+    },
+    "testCases": [
+      {"input": "test input string", "expectedOutput": "expected output", "isHidden": false},
+      {"input": "hidden test", "expectedOutput": "hidden result", "isHidden": true}
+    ],
+    "resumeRelevance": "Brief note on why this relates to their background"
+  }
+]`;
+
+    try {
+      const response: any = await this.openai.chat.completions.create({
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an expert coding interview designer. Return ONLY valid JSON array.' },
+          { role: 'user', content: prompt }
+        ]
+      });
+      const rawText = response.choices?.[0]?.message?.content || '[]';
+      const match = rawText.match(/\[[\s\S]*\]/);
+      return match ? JSON.parse(match[0]) : JSON.parse(rawText);
+    } catch (error) {
+      console.error('Coding Problem Generation Error:', error);
+      throw new BadRequestException('Failed to generate coding problems');
+    }
+  }
+
+  async evaluateCodeSubmission(problem: any, language: string, code: string): Promise<any> {
+    const evalPrompt = `Evaluate this ${language} code solution. Return ONLY valid JSON.
+
+Problem: ${problem.title}
+Description: ${problem.description}
+All test cases: ${JSON.stringify(problem.testCases)}
+
+Code:
+\`\`\`${language}
+${code}
+\`\`\`
+
+Return:
+{
+  "passed": true/false,
+  "passedCount": number,
+  "totalCount": number,
+  "results": [],
+  "timeComplexity": "O(n)",
+  "spaceComplexity": "O(1)",
+  "feedback": "quality feedback"
+}`;
+
+    try {
+      const response: any = await this.openai.chat.completions.create({
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a strict code evaluator. Return only JSON.' },
+          { role: 'user', content: evalPrompt }
+        ],
+        response_format: { type: 'json_object' }
+      });
+      return JSON.parse(response.choices?.[0]?.message?.content || '{}');
+    } catch (error) {
+      console.error('Code Evaluation Error:', error);
+      throw new BadRequestException('Failed to evaluate code');
+    }
+  }
+
+  async generateHRQuestions(skills: string, experience: string): Promise<any[]> {
+    const prompt = `Generate 8 HR interview questions for a candidate with these details:
+Skills: ${skills}
+Experience: ${experience}
+
+Create a mix of:
+- 1 Self-introduction prompt
+- 2 Experience-based questions
+- 2 Behavioral questions (STAR format)
+- 2 Resume/skills-specific questions
+- 1 Future goals question
+
+Return ONLY valid JSON array:
+[
+  {
+    "id": "q1",
+    "question": "Tell me about yourself and your background.",
+    "type": "intro",
+    "expectedDuration": 120,
+    "followUps": ["What are your key achievements?", "Why are you interested in this role?"],
+    "evaluationCriteria": "Communication, self-awareness, relevance"
+  }
+]`;
+
+    try {
+      const response: any = await this.openai.chat.completions.create({
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an expert HR interviewer. Return only valid JSON array.' },
+          { role: 'user', content: prompt }
+        ]
+      });
+      const rawText = response.choices?.[0]?.message?.content || '[]';
+      const match = rawText.match(/\[[\s\S]*\]/);
+      return match ? JSON.parse(match[0]) : JSON.parse(rawText);
+    } catch (error) {
+      console.error('HR Questions Generation Error:', error);
+      throw new BadRequestException('Failed to generate HR questions');
+    }
+  }
+
+  async evaluateInterviewResponse(question: string, answer: string): Promise<any> {
+    const prompt = `Analyze this interview response and provide feedback. Return ONLY valid JSON.
+
+Question: ${question}
+Answer: ${answer}
+
+Return JSON:
+{
+  "score": <0-10>,
+  "analysis": "detailed analysis paragraph",
+  "followUp": "relevant follow-up question",
+  "strengths": ["strength1", "strength2"],
+  "improvements": ["improvement1", "improvement2"],
+  "keywords": ["key concepts mentioned"]
+}`;
+
+    try {
+      const response: any = await this.openai.chat.completions.create({
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an expert HR interviewer evaluating candidates. Return only valid JSON.' },
+          { role: 'user', content: prompt }
+        ],
+        response_format: { type: 'json_object' }
+      });
+      return JSON.parse(response.choices?.[0]?.message?.content || '{}');
+    } catch (error) {
+      console.error('Interview Response Evaluation Error:', error);
+      throw new BadRequestException('Failed to evaluate interview response');
+    }
+  }
 }

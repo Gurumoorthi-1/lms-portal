@@ -1,0 +1,348 @@
+'use client';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useInterviewStore } from '@/hooks/useInterviewStore';
+import { useProctoring } from '@/hooks/useProctoring';
+import Skeleton from '@/components/ui/Skeleton';
+import ProctoringPanel from '@/components/exam/ProctoringPanel';
+import { ArrowLeft } from 'lucide-react';
+
+function Timer({ totalSeconds, onTimeUp }) {
+  const [timeLeft, setTimeLeft] = useState(totalSeconds);
+  
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      onTimeUp();
+      return;
+    }
+    const timer = setInterval(() => setTimeLeft(t => t - 1), 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft, onTimeUp]);
+
+  const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+  const s = (timeLeft % 60).toString().padStart(2, '0');
+  
+  return (
+    <div className={`font-mono font-bold px-3 py-1 rounded-lg ${timeLeft < 60 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+      ⏱ {m}:{s}
+    </div>
+  );
+}
+
+export default function AptitudePage() {
+  const router = useRouter();
+  const { skills, setAptitudeResults } = useInterviewStore();
+  const [phase, setPhase] = useState('setup');
+  const [numQuestions, setNumQuestions] = useState(10);
+  const [questions, setQuestions] = useState([]);
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [hintsUsed, setHintsUsed] = useState({});
+  const [showHint, setShowHint] = useState(false);
+  const [timeLimit, setTimeLimit] = useState(600);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const startTimeRef = useRef(Date.now());
+
+  const { videoRef, cameraReady, permissionError, warnings, requestFullscreen } = useProctoring({
+    sessionId: 'session-id', round: 'round1', enabled: phase === 'test'
+  });
+
+  useEffect(() => {
+    if (!skills || skills.length === 0) {
+      router.push('/student/resume');
+    }
+  }, [skills, router]);
+
+  const handleStart = async () => {
+    try {
+      requestFullscreen();
+    } catch (e) {
+      console.warn('Fullscreen request failed:', e);
+    }
+    
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:5001/aptitude/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skills, totalQuestions: numQuestions })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to generate');
+      
+      setQuestions(data.questions || []);
+      setTimeLimit(data.timeLimit || numQuestions * 60);
+      setPhase('test');
+      startTimeRef.current = Date.now();
+    } catch (err) {
+      alert('Failed to generate questions: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnswer = (qId, optionIdx) => {
+    setAnswers(prev => ({ ...prev, [qId]: optionIdx }));
+    setShowHint(false);
+  };
+
+  const handleHint = () => {
+    const q = questions[currentIdx];
+    if (!hintsUsed[q.id]) setHintsUsed(prev => ({ ...prev, [q.id]: true }));
+    setShowHint(true);
+  };
+
+  const handleSubmit = useCallback(async () => {
+    if (submitted) return;
+    setSubmitted(true);
+    setLoading(true);
+    try {
+      const answersArr = questions.map(q => ({
+        questionId: q.id,
+        selectedAnswer: answers[q.id] ?? -1,
+        usedHint: !!hintsUsed[q.id]
+      }));
+      
+      const res = await fetch('http://localhost:5001/aptitude/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: answersArr, questions })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Submit failed');
+      
+      setResults(data);
+      setAptitudeResults(data);
+      setPhase('results');
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    } catch (err) {
+      alert('Submission error: ' + err.message);
+      setSubmitted(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [submitted, questions, answers, hintsUsed, setAptitudeResults]);
+
+  const q = questions[currentIdx];
+  const answered = Object.keys(answers).length;
+
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 py-10 px-4">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3 space-y-6">
+          <Skeleton height="80px" rounded="rounded-2xl" />
+          <Skeleton height="250px" rounded="rounded-2xl" />
+          <div className="space-y-3">
+            <Skeleton height="50px" rounded="rounded-xl" />
+            <Skeleton height="50px" rounded="rounded-xl" />
+            <Skeleton height="50px" rounded="rounded-xl" />
+          </div>
+        </div>
+        <div className="space-y-4">
+          <Skeleton height="200px" rounded="rounded-2xl" />
+          <Skeleton height="50px" rounded="rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+
+  if (phase === 'setup') return (
+    <div className="min-h-screen bg-gray-50 py-16 px-4">
+      <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-lg p-8 border border-gray-100">
+        <button 
+          onClick={() => router.push('/student')}
+          className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-bold mb-6 transition-colors group"
+        >
+          <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+          Back to Dashboard
+        </button>
+        <h1 className="text-3xl font-black mb-2 text-indigo-900">Aptitude Test Setup</h1>
+        <p className="text-gray-500 mb-8">Configure your test. Proctoring will activate automatically.</p>
+
+        <div className="mb-6">
+          <label className="font-semibold text-gray-700 block mb-3">Number of Questions</label>
+          <div className="flex items-center gap-4">
+            <input type="range" min="5" max="50" value={numQuestions}
+              onChange={e => setNumQuestions(Number(e.target.value))}
+              className="flex-1 accent-orange-500" />
+            <span className="text-2xl font-black w-12 text-center text-indigo-900">{numQuestions}</span>
+          </div>
+        </div>
+
+        <div className="mb-8">
+          <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-bold text-indigo-900 mb-1">Standard Corporate Aptitude</div>
+              <div className="text-xs text-gray-600">Quantitative, Logical Reasoning, Verbal, & Data Interpretation</div>
+            </div>
+            <div className="text-2xl font-black text-indigo-900">{numQuestions} Questions</div>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 mb-6">
+          <p className="text-sm font-semibold text-amber-800 mb-2">⚠️ Proctoring Requirements</p>
+          <ul className="text-xs text-amber-700 space-y-1">
+            <li>• Camera & microphone access required</li>
+            <li>• Tab switching is monitored and logged</li>
+            <li>• Fullscreen mode will be enforced</li>
+          </ul>
+        </div>
+
+        <button onClick={handleStart}
+          className="w-full py-4 rounded-2xl text-white font-bold text-lg bg-orange-500 hover:bg-orange-600">
+          🚀 Start Test
+        </button>
+      </div>
+    </div>
+  );
+
+  if (phase === 'results' && results) return (
+    <div className="min-h-screen bg-gray-50 py-16 px-4">
+      <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-lg p-8 text-center border border-gray-100">
+        <div className="text-6xl mb-4">{results.passed ? '🎉' : '😞'}</div>
+        <h2 className={`text-3xl font-black mb-2 ${results.passed ? 'text-green-500' : 'text-red-500'}`}>
+          {results.passed ? 'Round 1 Passed!' : 'Round 1 Failed'}
+        </h2>
+        <p className="text-gray-500 mb-8">{results.message}</p>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="p-4 rounded-xl bg-gray-50">
+            <div className="text-2xl font-black text-indigo-900">{results.score}/{results.maxScore}</div>
+            <div className="text-xs text-gray-500">Score</div>
+          </div>
+          <div className="p-4 rounded-xl bg-gray-50">
+            <div className="text-2xl font-black text-orange-500">{results.percentage}%</div>
+            <div className="text-xs text-gray-500">Percentage</div>
+          </div>
+          <div className="p-4 rounded-xl bg-gray-50">
+            <div className={`text-2xl font-black ${results.passed ? 'text-green-500' : 'text-red-500'}`}>
+              {results.passed ? 'PASS' : 'FAIL'}
+            </div>
+            <div className="text-xs text-gray-500">Status</div>
+          </div>
+        </div>
+
+        <div className="text-left max-h-64 overflow-y-auto mb-6 space-y-2">
+          {(results.processedAnswers || []).map((a, i) => (
+            <div key={i} className={`p-3 rounded-xl text-sm ${a.isCorrect ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <div className="flex items-center gap-2">
+                <span>{a.isCorrect ? '✅' : '❌'}</span>
+                <span className="font-medium text-gray-700">Q{i + 1}</span>
+                {a.usedHint && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">-0.5 hint</span>}
+                <span className={`ml-auto font-bold ${a.isCorrect ? 'text-green-500' : 'text-red-500'}`}>+{a.score}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {results.passed ? (
+          <button onClick={() => router.push('/student/coding')}
+            className="w-full py-4 rounded-2xl text-white font-bold text-lg bg-indigo-900 hover:bg-indigo-800">
+            Continue to Coding Round →
+          </button>
+        ) : (
+          <button onClick={() => router.push('/student')}
+            className="w-full py-4 rounded-2xl text-white font-bold text-lg bg-red-500 hover:bg-red-600">
+            Return to Dashboard
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-6 px-4">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3 space-y-4">
+          <div className="flex items-center justify-between bg-white rounded-2xl px-6 py-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3">
+              <span className="font-bold text-gray-700">Q {currentIdx + 1} / {questions.length}</span>
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{q?.difficulty}</span>
+            </div>
+            <Timer totalSeconds={timeLimit} onTimeUp={handleSubmit} />
+          </div>
+
+          <div className="bg-white rounded-xl px-6 py-3 shadow-sm border border-gray-100">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>{answered} answered</span>
+              <span>{questions.length - answered} remaining</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <motion.div className="h-full rounded-full bg-orange-500" animate={{ width: `${(answered / questions.length) * 100}%` }} />
+            </div>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {q && (
+              <motion.div key={q.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+                <p className="text-lg font-semibold text-gray-800 mb-6 leading-relaxed">{q.question}</p>
+                <div className="space-y-3">
+                  {(q.options || []).map((opt, i) => {
+                    const selected = answers[q.id] === i;
+                    const cleanOpt = opt.replace(/^[a-d][\.\)]\s*/i, '');
+                    const label = String.fromCharCode(65 + i);
+                    return (
+                      <button key={i} onClick={() => handleAnswer(q.id, i)}
+                        className={`w-full text-left p-4 rounded-xl border-2 transition-all font-medium flex items-start gap-3 ${
+                          selected ? 'bg-indigo-900 border-indigo-900 text-white shadow-md' : 'border-gray-200 hover:border-indigo-500 text-gray-700 hover:bg-gray-50'
+                        }`}>
+                        <span className={`font-bold ${selected ? 'text-indigo-200' : 'text-gray-400'}`}>{label})</span>
+                        <span className="flex-1">{cleanOpt}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-6 flex items-center gap-4">
+                  <button onClick={handleHint}
+                    className={`text-sm px-4 py-2 rounded-xl border transition-all ${
+                      hintsUsed[q.id] ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'border-gray-200 text-gray-500 hover:border-yellow-300 hover:text-yellow-600'
+                    }`}>
+                    💡 {hintsUsed[q.id] ? 'Hint used (-0.5)' : 'Show Hint (-0.5)'}
+                  </button>
+                </div>
+                <AnimatePresence>
+                  {showHint && q.hint && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                      className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800 overflow-hidden">
+                      💡 {q.hint}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex gap-3">
+            <button onClick={() => { setCurrentIdx(i => Math.max(0, i - 1)); setShowHint(false); }} disabled={currentIdx === 0}
+              className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold disabled:opacity-40 hover:border-gray-300 transition-all">
+              ← Previous
+            </button>
+            {currentIdx < questions.length - 1 ? (
+              <button onClick={() => { setCurrentIdx(i => i + 1); setShowHint(false); }}
+                className="flex-1 py-3 rounded-xl text-white font-semibold transition-all bg-indigo-900">
+                Next →
+              </button>
+            ) : (
+              <button onClick={handleSubmit} className="flex-1 py-3 rounded-xl text-white font-semibold bg-orange-500">
+                Submit Test ✓
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <ProctoringPanel videoRef={videoRef} cameraReady={cameraReady} warnings={warnings} permissionError={permissionError} />
+          <button onClick={handleSubmit} className="w-full py-3 rounded-xl text-white font-bold text-sm bg-orange-500">
+            Submit Early
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

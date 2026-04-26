@@ -176,6 +176,7 @@ export default function DashboardLayout({ children }) {
     { icon: LayoutDashboard, label: 'Dashboard', href: '/student' },
     { icon: BarChart3, label: 'Analytics', href: '/analytics' },
     { icon: Code, label: 'Code Lab', href: '/codelab' },
+    { icon: User, label: 'Personal Interview', href: '/student/resume' },
   ];
 
   const bottomItems = [];

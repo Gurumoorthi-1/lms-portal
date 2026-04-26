@@ -98,3 +98,24 @@ export async function changePasswordInDB(currentPassword, newPassword) {
   const err = await res.json().catch(() => ({}));
   throw new Error(err.message || 'Failed to change password');
 }
+
+/**
+ * Log a proctoring violation to the database.
+ */
+export async function logProctoringEvent(sessionId, type, message, severity, round) {
+  return authFetch('/analytics/proctoring', {
+    method: 'POST',
+    body: JSON.stringify({ sessionId, type, message, severity, round }),
+  });
+}
+
+/**
+ * Save the final emotion analysis report to the database.
+ */
+export async function saveEmotionReport(sessionId, report) {
+  return authFetch('/analytics/emotion', {
+    method: 'POST',
+    body: JSON.stringify({ sessionId, report }),
+  });
+}
+

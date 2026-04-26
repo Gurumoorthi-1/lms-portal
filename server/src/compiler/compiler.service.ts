@@ -102,7 +102,7 @@ export class CompilerService {
         const classDir = path.join(tmpDir, `xl_java_${uid}`);
         fs.mkdirSync(classDir, { recursive: true });
 
-        const classMatch = code.match(/public\s+class\s+(\w+)/);
+        const classMatch = code.match(/(?:public\s+)?class\s+(\w+)/);
         const className = classMatch ? classMatch[1] : 'Main';
         const srcFile = path.join(classDir, `${className}.java`);
         fs.writeFileSync(srcFile, code, 'utf8');

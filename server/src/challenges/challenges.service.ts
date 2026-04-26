@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AiService } from '../ai/ai.service';
 
 export interface Challenge {
   id: number;
@@ -15,6 +16,8 @@ export interface Challenge {
 
 @Injectable()
 export class ChallengesService {
+  constructor(private readonly aiService: AiService) {}
+
   private readonly challenges: Challenge[] = [
     // ===== JAVASCRIPT (20 challenges) =====
     { id:1, language:'javascript', title:'Hello World', difficulty:'Easy', category:'Basics',
@@ -385,5 +388,80 @@ export class ChallengesService {
 
   getValidationFunction(id: number): ((output: string) => boolean) | undefined {
     return this.challenges.find((c) => c.id === id)?.validate;
+  }
+
+  async generateAiProblems(ctx: any, detectedLanguage: string): Promise<any> {
+    // Bypassing AI generation completely as requested by user
+    return this.getFallbackProblems(ctx.skills || '', detectedLanguage);
+  }
+
+  private getDefaultStarter(lang: string, fn: string): any {
+    const code = {
+      javascript: `function ${fn}() {\n  // your code here\n}`,
+      python: `def ${fn}():\n    pass  # your code`,
+      java: `class Solution {\n    public void ${fn}() {\n        // your code\n    }\n}`,
+      cpp: `class Solution {\npublic:\n    void ${fn}() {\n        // your code\n    }\n};`
+    };
+    return { [lang]: code[lang as keyof typeof code] || code.javascript };
+  }
+
+  private getFallbackProblems(skills: string, lang: string): any[] {
+    const starter = (fn: string) => this.getDefaultStarter(lang, fn);
+    return [
+      {
+        id: 'p1', title: 'Two Sum', difficulty: 'easy',
+        description: 'Given an array of integers nums and an integer target, return indices of the two numbers that add up to target. Each input has exactly one solution.',
+        examples: [{ input: 'nums = [2,7,11,15], target = 9', output: '[0,1]', explanation: 'nums[0] + nums[1] = 9' }],
+        constraints: ['2 <= nums.length <= 10^4', '-10^9 <= nums[i] <= 10^9'],
+        tags: ['array', 'hash-table'],
+        starterCode: starter('twoSum'),
+        testCases: [{ input: '[2,7,11,15], 9', expectedOutput: '[0,1]', isHidden: false }, { input: '[3,2,4], 6', expectedOutput: '[1,2]', isHidden: true }],
+        resumeRelevance: `Core algorithm relevant to ${skills}`,
+      },
+      {
+        id: 'p2', title: 'Valid Parentheses', difficulty: 'medium',
+        description: 'Given a string with brackets (){}[], determine if it is valid. Open brackets must be closed in correct order.',
+        examples: [{ input: 's = "()"', output: 'true', explanation: 'Brackets match' }],
+        constraints: ['1 <= s.length <= 10^4'],
+        tags: ['string', 'stack'],
+        starterCode: starter('isValid'),
+        testCases: [{ input: '"()"', expectedOutput: 'true', isHidden: false }, { input: '"(]"', expectedOutput: 'false', isHidden: true }],
+        resumeRelevance: 'Stack usage relevant to data structure knowledge',
+      },
+      {
+        id: 'p3', title: 'Longest Substring Without Repeating Characters', difficulty: 'medium',
+        description: 'Find the length of the longest substring without repeating characters.',
+        examples: [{ input: 's = "abcabcbb"', output: '3', explanation: '"abc" is longest' }],
+        constraints: ['0 <= s.length <= 5*10^4'],
+        tags: ['sliding-window', 'hash-table'],
+        starterCode: starter('lengthOfLongestSubstring'),
+        testCases: [{ input: '"abcabcbb"', expectedOutput: '3', isHidden: false }, { input: '"bbbbb"', expectedOutput: '1', isHidden: true }],
+        resumeRelevance: 'Sliding window technique for string manipulation',
+      },
+      {
+        id: 'p4', title: 'Number of Islands', difficulty: 'hard',
+        description: 'Given an m x n 2D binary grid of "1"s (land) and "0"s (water), return the number of islands.',
+        examples: [{ input: 'grid = [["1","1","0"],["0","1","0"],["0","0","1"]]', output: '2', explanation: '2 connected land masses' }],
+        constraints: ['1 <= m, n <= 300'],
+        tags: ['dfs', 'bfs', 'graph'],
+        starterCode: starter('numIslands'),
+        testCases: [{ input: '[["1","1","0"],["0","1","0"]]', expectedOutput: '1', isHidden: false }, { input: '[["1","0"],["0","1"]]', expectedOutput: '2', isHidden: true }],
+        resumeRelevance: 'Graph traversal — common in system design interviews',
+      },
+      {
+        id: 'p5', title: 'LRU Cache', difficulty: 'hard',
+        description: 'Design and implement a data structure for Least Recently Used (LRU) cache. It should support get and put operations in O(1).',
+        examples: [{ input: 'cache = LRUCache(2); cache.put(1,1); cache.put(2,2); cache.get(1)', output: '1', explanation: 'Returns 1 from cache' }],
+        constraints: ['1 <= capacity <= 3000', '0 <= key <= 10^4'],
+        tags: ['design', 'hash-table', 'linked-list'],
+        starterCode: starter('LRUCache'),
+        testCases: [{ input: 'capacity=2, ops=["put","put","get","put","get"]', expectedOutput: '[null,null,1,null,-1]', isHidden: false }],
+        resumeRelevance: 'System design — critical for backend/full-stack roles',
+      },
+    ];
+  }
+
+  async evaluateAiSubmission(problem: any, language: string, code: string): Promise<any> {
+    return this.aiService.evaluateCodeSubmission(problem, language, code);
   }
 }

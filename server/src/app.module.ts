@@ -11,6 +11,10 @@ import { ExamsModule } from './exams/exams.module';
 import { CompilerModule } from './compiler/compiler.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { ProgressModule } from './progress/progress.module';
+import { ResumeModule } from './resume/resume.module';
+import { AptitudeModule } from './aptitude/aptitude.module';
+import { InterviewModule } from './interview/interview.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -48,6 +52,10 @@ import { ProgressModule } from './progress/progress.module';
     CompilerModule,
     ChallengesModule,
     ProgressModule,
+    ResumeModule,
+    AptitudeModule,
+    InterviewModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
