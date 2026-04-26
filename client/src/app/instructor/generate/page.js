@@ -47,7 +47,7 @@ const QUESTION_COUNTS = [10, 30, 50];
 const SOURCE_MODES = [
   { id: 'topic', label: 'Topic & Prompt', icon: BookOpen },
   { id: 'youtube', label: 'YouTube Video', icon: Video },
-  { id: 'upload', label: 'Document / Image', icon: UploadCloud },
+  { id: 'upload', label: 'Document', icon: UploadCloud },
 ];
 
 function useTypingEffect(text, speed = 40, active = false) {
